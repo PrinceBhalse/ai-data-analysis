@@ -9,6 +9,14 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_ROWS_TO_ANALYZE = 1000;
 const SUPPORTED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.txt'];
 
+// The config is for the old Next.js Pages Router. For the new App Router, this is not needed.
+// export const config = {
+//   api: {
+//     bodyParser: false,
+//     responseLimit: '10mb',
+//   },
+// };
+
 /**
  * Parses a file (Excel, CSV, or TXT) into a JSON array of records.
  * @param filePath The path to the file on the temporary file system.
@@ -69,13 +77,12 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(tempDir, file.name);
     await fs.writeFile(filePath, buffer);
 
-    // Parse the file
     let jsonData: Record<string, unknown>[];
     try {
       jsonData = await parseFile(filePath, fileExt);
-    } catch (parseError: any) {
+    } catch (parseError: unknown) { // Changed 'any' to 'unknown'
       console.error('File parsing error:', parseError);
-      return NextResponse.json({ error: `Failed to parse file: ${parseError.message}` }, { status: 422 });
+      return NextResponse.json({ error: `Failed to parse file: ${parseError instanceof Error ? parseError.message : String(parseError)}` }, { status: 422 });
     } finally {
       // Clean up the temporary file
       await fs.unlink(filePath).catch(e => console.error("Failed to delete temp file:", e));
