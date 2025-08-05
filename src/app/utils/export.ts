@@ -6,7 +6,7 @@
  * @param columns Optional array of column keys to specify order and headers.
  * If not provided, all keys from the first object will be used.
  */
-export function exportToCsv<T extends Record<string, any>>(
+export function exportToCsv<T extends Record<string, unknown>>( // Fixed 'any' to 'unknown' in T
   data: T[],
   filename: string,
   columns?: { key: keyof T; header?: string }[]
@@ -21,7 +21,7 @@ export function exportToCsv<T extends Record<string, any>>(
   const headers = columns ? columns.map(col => col.header || String(col.key)) : keys.map(key => String(key));
 
   // Helper function to escape values for CSV (handle commas and quotes)
-  const escapeCsvValue = (value: any): string => {
+  const escapeCsvValue = (value: unknown): string => { // Fixed 'any' to 'unknown'
     if (value === null || value === undefined) {
       return '';
     }
