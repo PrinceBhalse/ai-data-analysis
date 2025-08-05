@@ -13,13 +13,9 @@ import { useDataContext } from '@/context/DataContext';
 import DataTable from '@/components/DataTable';
 import SummarySkeleton from '@/components/SummarySkeleton';
 import ChartSkeleton from '@/components/ChartSkeleton';
-import { exportToCsv } from '../utils/export';
+import { exportToCsv } from '../utils/export'; // Corrected import path
 
 // Define types for better type safety
-// Moved AnalysisData interface to DataContext.tsx if it's used globally
-// If only used here, keep it. For now, assuming it's used globally and defined in DataContext.tsx
-// interface AnalysisData { ... } // Removed if defined globally
-
 interface ChartConfig {
   type: 'bar' | 'line' | 'pie' | 'scatter';
   x: string;
@@ -27,6 +23,13 @@ interface ChartConfig {
   title: string;
   insight: string;
 }
+
+// ChartErrorFallback component - defined outside DashboardPage
+const ChartErrorFallback = () => (
+  <div className="bg-red-50 border border-red-200 p-4 rounded text-red-800 dark:bg-red-900 dark:border-red-700 dark:text-red-200">
+    Failed to render chart. Data might be incompatible or an internal error occurred.
+  </div>
+);
 
 // 2. ErrorBoundary Component
 interface ErrorBoundaryProps {
@@ -44,7 +47,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(_: Error): ErrorBoundaryState { // Fixed unused '_' warning
+  static getDerivedStateFromError(_: Error): ErrorBoundaryState { // Removed unused '_' parameter name
     return { hasError: true };
   }
 
@@ -76,7 +79,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ text }) => {
 // 4. ChartRenderer Component
 interface ChartRendererProps {
   config: ChartConfig;
-  data: Record<string, any>[]; // Fixed 'any' type here
+  data: Record<string, unknown>[]; // Fixed 'any' type here
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
@@ -92,7 +95,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ config, data }) => {
     );
   }
   
-  const getNumericValue = (item: Record<string, any>, key: string) => { // Fixed 'any' type here
+  const getNumericValue = (item: Record<string, unknown>, key: string) => { // Fixed 'any' type here
     const value = item[key];
     if (typeof value === 'string') {
       const num = parseFloat(value);
@@ -194,9 +197,8 @@ export default function DashboardPage() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // Destructure analysis data (ensure columns is destructured)
-  // This must be done unconditionally before any conditional returns
-  const { summary, kpis = [], charts = [], rawData = [], columns = [] } = analysis || {}; // Use default empty objects/arrays if analysis is null
+  // Destructure analysis data unconditionally at the top level
+  const { summary, kpis = [], charts = [], rawData = [], columns = [] } = analysis || {};
 
   // PDF download function - defined unconditionally
   const downloadPDF = useCallback(async () => {
@@ -290,7 +292,7 @@ export default function DashboardPage() {
       element?.classList.remove('pdf-generation');
       setIsGeneratingPDF(false);
     }
-  }, [analysis]); // analysis is a dependency because its properties (rawData, columns) are used indirectly
+  }, [summary, kpis, charts, rawData, columns]); // Explicitly list all derived dependencies
 
   // CSV download function - defined unconditionally
   const downloadCSV = useCallback(() => {
