@@ -13,24 +13,19 @@ import { useDataContext } from '@/context/DataContext';
 import DataTable from '@/components/DataTable';
 import SummarySkeleton from '@/components/SummarySkeleton';
 import ChartSkeleton from '@/components/ChartSkeleton';
-import { exportToCsv } from '../utils/export';
+import { exportToCsv } from '@/utils/export';
 
 // Define types for better type safety
+// Moved AnalysisData interface to DataContext.tsx if it's used globally
+// If only used here, keep it. For now, assuming it's used globally and defined in DataContext.tsx
+// interface AnalysisData { ... } // Removed if defined globally
+
 interface ChartConfig {
   type: 'bar' | 'line' | 'pie' | 'scatter';
   x: string;
   y: string;
   title: string;
   insight: string;
-}
-
-interface AnalysisData {
-  summary: string;
-  kpis: string[];
-  charts: ChartConfig[];
-  rawData: Record<string, any>[];
-  columns: string[];
-  totalRows: number;
 }
 
 // 2. ErrorBoundary Component
@@ -49,7 +44,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(_: Error): ErrorBoundaryState { // Fixed unused '_' warning
     return { hasError: true };
   }
 
@@ -81,7 +76,7 @@ const KpiCard: React.FC<KpiCardProps> = ({ text }) => {
 // 4. ChartRenderer Component
 interface ChartRendererProps {
   config: ChartConfig;
-  data: Record<string, any>[];
+  data: Record<string, any>[]; // Fixed 'any' type here
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
@@ -97,7 +92,7 @@ const ChartRenderer: React.FC<ChartRendererProps> = ({ config, data }) => {
     );
   }
   
-  const getNumericValue = (item: any, key: string) => {
+  const getNumericValue = (item: Record<string, any>, key: string) => { // Fixed 'any' type here
     const value = item[key];
     if (typeof value === 'string') {
       const num = parseFloat(value);
@@ -199,64 +194,11 @@ export default function DashboardPage() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
-  // Effect to load analysis data from sessionStorage if not in context
-  useEffect(() => {
-    if (!analysis) {
-      const storedAnalysis = sessionStorage.getItem('aiAnalysisData');
-      if (storedAnalysis) {
-        try {
-          const parsedData = JSON.parse(storedAnalysis);
-          setAnalysis(parsedData); // Set it to context
-        } catch (e) {
-          console.error("Failed to parse stored analysis data from sessionStorage:", e);
-          sessionStorage.removeItem('aiAnalysisData'); // Clear corrupt data
-          router.push('/upload'); // Redirect to upload
-        }
-      } else {
-        router.push('/upload'); // If no data found anywhere, redirect
-      }
-    }
-  }, [analysis, setAnalysis, router]);
-
-
-  // Show loading state with skeletons if analysis data is not yet available
-  if (!analysis) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
-        <div className="text-center w-full max-w-7xl mx-auto">
-          <SummarySkeleton />
-
-          {/* Placeholder for KPIs skeleton */}
-          <section className="mb-10 min-w-[800px]">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Key Performance Indicators</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Render a few KpiCardSkeletons here (you'll create this next) */}
-              <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse"></div>
-              <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse"></div>
-              <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse"></div>
-            </div>
-          </section>
-
-          {/* Render multiple ChartSkeletons */}
-          <section className="mb-10 min-w-[800px]">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Data Visualizations</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ChartSkeleton />
-              <ChartSkeleton />
-              <ChartSkeleton />
-              <ChartSkeleton />
-            </div>
-          </section>
-
-          <p className="mt-8 text-lg text-gray-700 dark:text-gray-300">Analyzing your data and preparing visualizations...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Destructure analysis data (ensure columns is destructured)
-  const { summary, kpis = [], charts = [], rawData = [], columns = [] } = analysis;
+  // This must be done unconditionally before any conditional returns
+  const { summary, kpis = [], charts = [], rawData = [], columns = [] } = analysis || {}; // Use default empty objects/arrays if analysis is null
 
+  // PDF download function - defined unconditionally
   const downloadPDF = useCallback(async () => {
     try {
       setIsGeneratingPDF(true);
@@ -348,9 +290,9 @@ export default function DashboardPage() {
       element?.classList.remove('pdf-generation');
       setIsGeneratingPDF(false);
     }
-  }, [analysis]);
+  }, [analysis]); // analysis is a dependency because its properties (rawData, columns) are used indirectly
 
-  // Function for CSV download
+  // CSV download function - defined unconditionally
   const downloadCSV = useCallback(() => {
     if (rawData.length === 0) {
       setPdfError("No data available to export to CSV.");
@@ -367,14 +309,62 @@ export default function DashboardPage() {
         console.error("CSV export failed:", error);
         setPdfError(error instanceof Error ? error.message : "An error occurred during CSV export.");
     }
-  }, [rawData, columns]);
+  }, [rawData, columns]); // rawData and columns are dependencies
+
+  // Effect to load analysis data from sessionStorage if not in context
+  useEffect(() => {
+    if (!analysis) {
+      const storedAnalysis = sessionStorage.getItem('aiAnalysisData');
+      if (storedAnalysis) {
+        try {
+          const parsedData = JSON.parse(storedAnalysis);
+          setAnalysis(parsedData); // Set it to context
+        } catch (e) {
+          console.error("Failed to parse stored analysis data from sessionStorage:", e);
+          sessionStorage.removeItem('aiAnalysisData'); // Clear corrupt data
+          router.push('/upload'); // Redirect to upload
+        }
+      } else {
+        router.push('/upload'); // If no data found anywhere, redirect
+      }
+    }
+  }, [analysis, setAnalysis, router]);
 
 
-  const ChartErrorFallback = () => (
-    <div className="bg-red-50 border border-red-200 p-4 rounded text-red-800 dark:bg-red-900 dark:border-red-700 dark:text-red-200">
-      Failed to render chart. Data might be incompatible or an internal error occurred.
-    </div>
-  );
+  // Show loading state with skeletons if analysis data is not yet available
+  if (!analysis) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+        <div className="text-center w-full max-w-7xl mx-auto">
+          <SummarySkeleton />
+
+          {/* Placeholder for KPIs skeleton */}
+          <section className="mb-10 min-w-[800px]">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Key Performance Indicators</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Render a few KpiCardSkeletons here (you'll create this next) */}
+              <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+              <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+              <div className="h-24 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse"></div>
+            </div>
+          </section>
+
+          {/* Render multiple ChartSkeletons */}
+          <section className="mb-10 min-w-[800px]">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Data Visualizations</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ChartSkeleton />
+              <ChartSkeleton />
+              <ChartSkeleton />
+              <ChartSkeleton />
+            </div>
+          </section>
+
+          <p className="mt-8 text-lg text-gray-700 dark:text-gray-300">Analyzing your data and preparing visualizations...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-50 dark:bg-gray-900 min-h-screen font-inter">
@@ -427,7 +417,7 @@ export default function DashboardPage() {
         </section>
 
         {kpis.length > 0 && (
-          <section id="kpi-section" className="mb-10 min-w-[800px]"> {/* Added id="kpi-section" */}
+          <section id="kpi-section" className="mb-10 min-w-[800px]">
             <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Key Performance Indicators</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {kpis.map((kpi, index) => (
@@ -453,7 +443,7 @@ export default function DashboardPage() {
         )}
         
         {rawData.length > 0 && (
-          <section id="data-table-section" className="mb-10 min-w-[800px]"> {/* Added id="data-table-section" */}
+          <section id="data-table-section" className="mb-10 min-w-[800px]">
             <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Raw Data Table</h2>
             <DataTable
               data={rawData}
@@ -476,10 +466,9 @@ export default function DashboardPage() {
           font-family: 'Inter', sans-serif;
         }
 
-        /* Simplified PDF export styles for better compatibility */
         .pdf-export-active body {
-          background-color: #ffffff !important; /* Force white background for PDF */
-          color: #000000 !important; /* Force black text for PDF */
+          background-color: #ffffff !important;
+          color: #000000 !important;
         }
 
         .pdf-export {
@@ -487,7 +476,6 @@ export default function DashboardPage() {
           color: #000000 !important;
         }
 
-        /* Recharts specific styling to ensure text is visible in PDF */
         .recharts-text {
           fill: #000000 !important;
         }
