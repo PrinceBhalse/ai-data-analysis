@@ -12,7 +12,7 @@ interface Column<T> {
   render?: (value: T[keyof T], row: T) => React.ReactNode; // Custom render function for cells
 }
 
-interface DataTableProps<T extends Record<string, any>> {
+interface DataTableProps<T extends Record<string, unknown>> { // Fixed 'any' to 'unknown'
   data: T[]; // The array of data objects
   columns?: Column<T>[]; // Optional explicit column definitions
   pageSize?: number; // Number of rows per page
@@ -20,7 +20,7 @@ interface DataTableProps<T extends Record<string, any>> {
   description?: string; // Optional description for the table
 }
 
-export default function DataTable<T extends Record<string, any>>({
+export default function DataTable<T extends Record<string, unknown>>({ // Fixed 'any' to 'unknown'
   data,
   columns: propColumns,
   pageSize = 10,
