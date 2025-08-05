@@ -13,7 +13,7 @@ import { useDataContext } from '@/context/DataContext';
 import DataTable from '@/components/DataTable';
 import SummarySkeleton from '@/components/SummarySkeleton';
 import ChartSkeleton from '@/components/ChartSkeleton';
-import { exportToCsv } from '@/utils/export';
+import { exportToCsv } from '../utils/export';
 
 // Define types for better type safety
 // Moved AnalysisData interface to DataContext.tsx if it's used globally
