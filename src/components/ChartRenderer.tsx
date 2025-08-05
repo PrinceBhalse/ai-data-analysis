@@ -1,53 +1,39 @@
+// src/components/ChartRenderer.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
-  LineChart, Line,
-  BarChart, Bar,
-  PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
-  ScatterChart, Scatter
+  LineChart, Line, BarChart, Bar, PieChart, Pie, ScatterChart, Scatter,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
-import { motion, Variants } from 'framer-motion';
 
 interface ChartConfig {
-  type: 'line' | 'bar' | 'pie' | 'scatter';
+  type: 'bar' | 'line' | 'pie' | 'scatter';
   x: string;
   y: string;
   title: string;
   insight: string;
 }
 
-const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F'];
+interface ChartRendererProps {
+  config: ChartConfig;
+  data: Record<string, unknown>[]; // Fixed 'any' to 'unknown'
+}
 
-export default function ChartRenderer({ config, data = [] }: { config: ChartConfig, data: any[] }) {
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+
+const ChartRenderer: React.FC<ChartRendererProps> = ({ config, data }) => {
   const { type, x, y, title, insight } = config;
-  const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Properly typed animation variants
-  const containerVariants: Variants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.5,
-        ease: "easeOut" as const
-      }
-    }
-  };
-
-  // Safely format pie chart labels
-  const formatPieLabel = ({ name, percent }: { name: string, percent?: number }) => {
-    return `${name}: ${((percent || 0) * 100).toFixed(0)}%`;
-  };
-
-  // Helper to ensure y-axis data is numeric for charts
-  const getNumericValue = (item: any, key: string) => {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+        <p>No data available for this chart.</p>
+      </div>
+    );
+  }
+  
+  const getNumericValue = (item: Record<string, unknown>, key: string) => { // Fixed 'any' to 'unknown'
     const value = item[key];
     if (typeof value === 'string') {
       const num = parseFloat(value);
@@ -55,45 +41,20 @@ export default function ChartRenderer({ config, data = [] }: { config: ChartConf
     }
     return value;
   };
-
-  // Prepare data for charting (ensure numeric types for y-axis)
+  
   const chartData = data.map(item => ({
     ...item,
     [y]: getNumericValue(item, y)
   }));
 
-  // Handle empty data state
-  if (!chartData || chartData.length === 0) {
-    return (
-      <motion.div
-        initial="hidden"
-        animate={isMounted ? "visible" : "hidden"}
-        variants={containerVariants}
-        className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
-      >
-        <div className="mb-3">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">{title}</h3>
-          {insight && (
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 italic">
-              {insight}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center justify-center h-64 text-gray-500">
-          No data available for this chart
-        </div>
-      </motion.div>
-    );
-  }
-
-  // Define the chart component based on type
   let ChartComponent;
   switch (type) {
     case 'bar':
       ChartComponent = (
-        <BarChart data={chartData}>
-          <XAxis dataKey={x} />
-          <YAxis />
+        <BarChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+          <XAxis dataKey={x} stroke="#666" />
+          <YAxis stroke="#666" />
           <Tooltip />
           <Legend />
           <Bar dataKey={y} fill={COLORS[0]} />
@@ -102,12 +63,13 @@ export default function ChartRenderer({ config, data = [] }: { config: ChartConf
       break;
     case 'line':
       ChartComponent = (
-        <LineChart data={chartData}>
-          <XAxis dataKey={x} />
-          <YAxis />
+        <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+          <XAxis dataKey={x} stroke="#666" />
+          <YAxis stroke="#666" />
           <Tooltip />
           <Legend />
-          <Line type="monotone" dataKey={y} stroke={COLORS[1]} strokeWidth={2} />
+          <Line type="monotone" dataKey={y} stroke={COLORS[1]} activeDot={{ r: 8 }} />
         </LineChart>
       );
       break;
@@ -120,12 +82,15 @@ export default function ChartRenderer({ config, data = [] }: { config: ChartConf
             nameKey={x}
             cx="50%"
             cy="50%"
-            outerRadius={100}
-            label={formatPieLabel}
+            outerRadius={120}
+            fill="#8884d8"
+            label
           >
-            {chartData.map((_, i) => (
-              <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
-            ))}
+            {
+              chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))
+            }
           </Pie>
           <Tooltip />
           <Legend />
@@ -134,7 +99,8 @@ export default function ChartRenderer({ config, data = [] }: { config: ChartConf
       break;
     case 'scatter':
       ChartComponent = (
-        <ScatterChart>
+        <ScatterChart margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
           <XAxis type="category" dataKey={x} name={x} stroke="#666" />
           <YAxis type="number" dataKey={y} name={y} stroke="#666" />
           <Tooltip cursor={{ strokeDasharray: '3 3' }} />
@@ -152,24 +118,14 @@ export default function ChartRenderer({ config, data = [] }: { config: ChartConf
   }
 
   return (
-    <motion.div
-      initial="hidden"
-      animate={isMounted ? "visible" : "hidden"}
-      variants={containerVariants}
-      className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
-    >
-      <div className="mb-3">
-        <h3 className="text-lg font-semibold text-gray-800 dark:text-white">{title}</h3>
-        {insight && (
-          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 italic">{insight}</p>
-        )}
-      </div>
-      <div className="h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          {/* Render the single ChartComponent here */}
-          {ChartComponent}
-        </ResponsiveContainer>
-      </div>
-    </motion.div>
+    <div className="chart-container flex flex-col h-[400px]">
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">{title}</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{insight}</p>
+      <ResponsiveContainer width="100%" height="100%">
+        {ChartComponent}
+      </ResponsiveContainer>
+    </div>
   );
-}
+};
+
+export default ChartRenderer;
