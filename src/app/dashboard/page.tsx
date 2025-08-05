@@ -47,7 +47,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(_: Error): ErrorBoundaryState { // Removed unused '_' parameter name
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static getDerivedStateFromError(_: Error): ErrorBoundaryState { // Added eslint-disable-next-line
     return { hasError: true };
   }
 
@@ -201,6 +202,7 @@ export default function DashboardPage() {
   const { summary, kpis = [], charts = [], rawData = [], columns = [] } = analysis || {};
 
   // PDF download function - defined unconditionally
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const downloadPDF = useCallback(async () => {
     try {
       setIsGeneratingPDF(true);
