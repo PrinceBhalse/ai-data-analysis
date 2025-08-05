@@ -9,19 +9,29 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "formidable": "^3.5.4",
+    "framer-motion": "^12.23.12",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
+    "lucide-react": "^0.536.0",
+    "next": "15.4.5",
+    "openai": "^5.12.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.4.5"
+    "recharts": "^3.1.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/formidable": "^3.4.5",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "@types/recharts": "^1.8.29",
     "eslint": "^9",
     "eslint-config-next": "15.4.5",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
