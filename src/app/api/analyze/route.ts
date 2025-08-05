@@ -9,14 +9,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_ROWS_TO_ANALYZE = 1000;
 const SUPPORTED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.txt'];
 
-// The config is for the old Next.js Pages Router. For the new App Router, this is not needed.
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//     responseLimit: '10mb',
-//   },
-// };
-
 /**
  * Parses a file (Excel, CSV, or TXT) into a JSON array of records.
  * @param filePath The path to the file on the temporary file system.
@@ -28,27 +20,16 @@ async function parseFile(filePath: string, fileExt: string): Promise<Record<stri
     // Handle Excel files (XLS, XLSX)
     const workbook = XLSX.readFile(filePath);
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]; // Get the first sheet
-    return XLSX.utils.sheet_to_json(worksheet);
-  } else if (fileExt === '.csv') {
-    // Handle CSV files
-    const csvContent = await fs.readFile(filePath, 'utf-8');
-    const workbook = XLSX.read(csvContent, { type: 'string' });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(worksheet);
-  } else if (fileExt === '.txt') {
-    // Handle TXT files (assuming tab-separated or comma-separated)
-    const txtContent = await fs.readFile(filePath, 'utf-8');
-    // Attempt to parse as CSV (comma or tab delimited)
-    const workbook = XLSX.read(txtContent, { type: 'string', FS: ',', RS: '\n' }); // Try comma
-    let jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-
-    if (jsonData.length === 0 || Object.keys(jsonData[0]).length === 1) { // If comma failed or only one column
-      const tabWorkbook = XLSX.read(txtContent, { type: 'string', FS: '\t', RS: '\n' }); // Try tab
-      jsonData = XLSX.utils.sheet_to_json(tabWorkbook.Sheets[tabWorkbook.SheetNames[0]]);
-    }
-    return jsonData;
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
+  } else {
+    // Handle CSV or TXT files by reading as a Buffer
+    const fileContentBuffer = await fs.readFile(filePath);
+    // XLSX.read can parse CSV/TXT from a buffer directly.
+    // It will try to infer the delimiter for text files.
+    const workbook = XLSX.read(fileContentBuffer, { type: 'buffer' });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]]; // Get the first sheet
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
   }
-  throw new Error('Unsupported file type.');
 }
 
 export async function POST(request: NextRequest) {
