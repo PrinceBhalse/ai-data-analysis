@@ -9,6 +9,8 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_ROWS_TO_ANALYZE = 1000;
 const SUPPORTED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.txt'];
 
+
+
 /**
  * Parses a file (Excel, CSV, or TXT) into a JSON array of records.
  * @param filePath The path to the file on the temporary file system.
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json({ error: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit.` }, { status: 413 });
     }
+
 
     const fileExt = path.extname(file.name).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.includes(fileExt)) {
@@ -136,6 +139,7 @@ export async function POST(request: NextRequest) {
         }
       }
     };
+
 
     let result;
     let delay = 1000; // Initial delay of 1 second
