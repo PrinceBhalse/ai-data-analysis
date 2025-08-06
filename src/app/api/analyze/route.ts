@@ -9,6 +9,14 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_ROWS_TO_ANALYZE = 1000;
 const SUPPORTED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.txt'];
 
+// The config is for the old Next.js Pages Router. For the new App Router, this is not needed.
+// export const config = {
+//   api: {
+//     bodyParser: false,
+//     responseLimit: '10mb',
+//   },
+// };
+
 /**
  * Parses a file (Excel, CSV, or TXT) into a JSON array of records.
  * @param filePath The path to the file on the temporary file system.
@@ -22,101 +30,130 @@ async function parseFile(filePath: string, fileExt: string): Promise<Record<stri
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]; // Get the first sheet
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
   } else {
-    // Handle CSV or TXT files by reading as a Buffer
+    // Handle CSV or TXT files
+    // Read as a Buffer for robust parsing by XLSX.read
     const fileContentBuffer = await fs.readFile(filePath);
-    // XLSX.read can parse CSV/TXT from a buffer directly.
-    // It will try to infer the delimiter for text files.
+    // XLSX.read can parse CSV/TXT from a buffer directly
     const workbook = XLSX.read(fileContentBuffer, { type: 'buffer' });
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]; // Get the first sheet
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const formData = await request.formData();
+    // Validate content type to ensure it's a file upload
+    const contentType = req.headers.get('content-type');
+    if (!contentType?.includes('multipart/form-data')) {
+      return NextResponse.json(
+        { error: 'Content-Type must be multipart/form-data' },
+        { status: 400 }
+      );
+    }
+
+    // Process form data to extract the file
+    const formData = await req.formData();
     const file = formData.get('dataset') as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'No file received' },
+        { status: 400 }
+      );
     }
 
-    // Basic file validation
+    // Validate file size against the defined maximum
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: `File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit.` }, { status: 413 });
+      return NextResponse.json(
+        { error: `File exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit` },
+        { status: 400 }
+      );
     }
 
+    // Validate file extension against supported types
     const fileExt = path.extname(file.name).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.includes(fileExt)) {
-      return NextResponse.json({ error: `Unsupported file type: ${fileExt}. Supported types are: ${SUPPORTED_EXTENSIONS.join(', ')}` }, { status: 415 });
+      return NextResponse.json(
+        { error: `Unsupported file extension. Supported: ${SUPPORTED_EXTENSIONS.join(', ')}` },
+        { status: 400 }
+      );
     }
 
-    // Save file to a temporary location
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const tempDir = os.tmpdir();
-    const filePath = path.join(tempDir, file.name);
-    await fs.writeFile(filePath, buffer);
+    // Save the incoming file to a temporary location
+    const buffer = await file.arrayBuffer();
+    const tmpPath = path.join(os.tmpdir(), `upload_${Date.now()}${fileExt}`);
+    await fs.writeFile(tmpPath, Buffer.from(buffer));
 
     let jsonData: Record<string, unknown>[];
     try {
-      jsonData = await parseFile(filePath, fileExt);
-    } catch (parseError: unknown) { // Changed 'any' to 'unknown'
-      console.error('File parsing error:', parseError);
-      return NextResponse.json({ error: `Failed to parse file: ${parseError instanceof Error ? parseError.message : String(parseError)}` }, { status: 422 });
+      // Parse the file using the updated parseFile function
+      jsonData = await parseFile(tmpPath, fileExt);
+    } catch (error) {
+      console.error('File parsing error:', error);
+      return NextResponse.json(
+        { error: 'Failed to parse file. Please ensure it is a valid CSV, Excel, or TXT format.' },
+        { status: 400 }
+      );
     } finally {
-      // Clean up the temporary file
-      await fs.unlink(filePath).catch(e => console.error("Failed to delete temp file:", e));
+      // Clean up the temporary file, ignoring potential errors during cleanup
+      try { await fs.unlink(tmpPath); } catch (cleanupError) {
+        console.warn('Failed to delete temporary file:', cleanupError);
+      }
     }
 
-    if (jsonData.length === 0) {
-      return NextResponse.json({ error: 'Parsed file contains no data.' }, { status: 422 });
+    // Validate if any data was parsed
+    if (!jsonData.length) {
+      return NextResponse.json(
+        { error: 'No parsable data found in the file. It might be empty or malformed.' },
+        { status: 400 }
+      );
     }
 
-    // Limit rows for AI analysis if necessary
-    const dataToAnalyze = jsonData.slice(0, MAX_ROWS_TO_ANALYZE);
+    // Limit the data sent to the LLM to avoid exceeding token limits and improve performance
+    const analysisDataForLLM = jsonData.slice(0, MAX_ROWS_TO_ANALYZE);
+    const columns = Object.keys(analysisDataForLLM[0] || {});
 
-    // Dynamic column extraction
-    const columns = Object.keys(jsonData[0] || {});
+    // Construct the prompt for the LLM, providing context and sample data
+    const safePrompt = `
+Analyze this dataset with ${jsonData.length} rows (showing first ${analysisDataForLLM.length} for analysis) and columns: ${columns.join(', ')}.
 
-    // Prepare prompt for Gemini API
-    const prompt = `Analyze the following dataset from a digital marketing agency.
-    Provide:
-    1. A concise summary (around 100-150 words) of the key findings and overall performance.
-    2. A list of 3-5 key performance indicators (KPIs) relevant to marketing data (e.g., "Total Revenue: $X", "New Users: Y", "Conversion Rate: Z%").
-    3. Configurations for 3-4 interactive charts (line, bar, pie, scatter) that visualize important aspects of the data. For each chart, specify:
-       - 'type': 'line', 'bar', 'pie', or 'scatter'
-       - 'x': The column name for the X-axis.
-       - 'y': The column name for the Y-axis.
-       - 'title': A descriptive title for the chart.
-       - 'insight': A brief (1-2 sentence) insight derived from the chart.
-    
-    Ensure the output is a JSON object with 'summary', 'kpis', and 'charts' properties.
-    The 'charts' array should contain objects with 'type', 'x', 'y', 'title', and 'insight'.
-    
-    Dataset (first ${dataToAnalyze.length} rows):
-    ${JSON.stringify(dataToAnalyze, null, 2)}
-    `;
+Provide:
+1. Summary: A 2-3 sentence overview of the dataset.
+2. KPIs: 3-5 key performance indicators or important metrics derived from the data.
+3. Charts: Recommended visualizations as a JSON array of objects, each with:
+    "type": "bar|line|pie|scatter",
+    "x": "column_name", // The column for the x-axis
+    "y": "column_name", // The column for the y-axis
+    "title": "string", // A descriptive title for the chart
+    "insight": "string" // A brief insight derived from the chart
 
-    // Call Gemini API
-    const apiKey = ""; // Canvas will provide this in runtime
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`; // Using latest flash model
+Sample data (first 5 rows):
+${JSON.stringify(analysisDataForLLM.slice(0, 5), null, 2)}
+
+Respond with valid JSON only.`;
+
+    // --- Gemini API Call ---
+    let chatHistory = [];
+    chatHistory.push({ role: "user", parts: [{ text: safePrompt }] });
 
     const payload = {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents: chatHistory,
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
           properties: {
             summary: { type: "STRING" },
-            kpis: { type: "ARRAY", items: { type: "STRING" } },
+            kpis: {
+              type: "ARRAY",
+              items: { type: "STRING" }
+            },
             charts: {
               type: "ARRAY",
               items: {
                 type: "OBJECT",
                 properties: {
-                  type: { type: "STRING", enum: ["line", "bar", "pie", "scatter"] },
+                  type: { type: "STRING", enum: ["bar", "line", "pie", "scatter"] },
                   x: { type: "STRING" },
                   y: { type: "STRING" },
                   title: { type: "STRING" },
@@ -131,35 +168,48 @@ export async function POST(request: NextRequest) {
       }
     };
 
-    let result;
-    let delay = 1000; // Initial delay of 1 second
-    const maxRetries = 3;
+    // IMPORTANT: API keys should be loaded from environment variables, not hardcoded.
+    // For Next.js, you typically use a .env.local file in your project root.
+    // Example: GEMINI_API_KEY="YOUR_API_KEY_HERE"
+    const apiKey = process.env.GEMINI_API_KEY || "";
+    
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API key not configured. Please set GEMINI_API_KEY environment variable.' },
+        { status: 500 }
+      );
+    }
 
-    for (let i = 0; i < maxRetries; i++) {
+    // --- UPDATED GEMINI MODEL NAME ---
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+    let response;
+    let result;
+    const MAX_RETRIES = 5;
+    let retries = 0;
+    let delay = 1000; // 1 second
+
+    while (retries < MAX_RETRIES) {
       try {
-        const response = await fetch(apiUrl, {
+        response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
         if (response.status === 429) { // Too Many Requests
-          console.warn(`Rate limit hit. Retrying in ${delay / 1000} seconds...`);
+          retries++;
           await new Promise(res => setTimeout(res, delay));
           delay *= 2; // Exponential backoff
-          continue; // Retry the request
-        }
-
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(`API call failed with status ${response.status}: ${errorBody}`);
+          continue;
         }
 
         result = await response.json();
-        break; // Success, exit loop
+        break; // Success, break out of retry loop
+
       } catch (fetchError) {
-        console.error(`Attempt ${i + 1} failed:`, fetchError);
-        if (i === maxRetries - 1) throw fetchError; // Re-throw if last retry
+        console.error('Fetch error during Gemini API call:', fetchError);
+        retries++;
         await new Promise(res => setTimeout(res, delay));
         delay *= 2;
       }
@@ -199,8 +249,8 @@ export async function POST(request: NextRequest) {
     console.error('API Route Error:', error);
     return NextResponse.json(
       {
-        error: 'Data analysis failed. Please check the file format and content.',
-        details: error instanceof Error ? error.message : String(error)
+        error: 'Data analysis failed due to an internal server error.',
+        details: error instanceof Error ? error.message : 'An unknown error occurred.'
       },
       { status: 500 }
     );
