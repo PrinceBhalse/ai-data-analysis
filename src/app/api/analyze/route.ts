@@ -9,8 +9,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_ROWS_TO_ANALYZE = 1000;
 const SUPPORTED_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.txt'];
 
-
-
 /**
  * Parses a file (Excel, CSV, or TXT) into a JSON array of records.
  * @param filePath The path to the file on the temporary file system.
@@ -35,6 +33,17 @@ async function parseFile(filePath: string, fileExt: string): Promise<Record<stri
 }
 
 export async function POST(request: NextRequest) {
+  // --- EARLY DIAGNOSTIC LOG START ---
+  const apiKeyEarlyCheck = process.env.GEMINI_API_KEY;
+  console.log('Vercel Runtime: EARLY CHECK - GEMINI_API_KEY is:', apiKeyEarlyCheck ? `Defined, Length: ${apiKeyEarlyCheck.length}, Starts with: ${apiKeyEarlyCheck.substring(0, 5)}` : 'UNDEFINED or EMPTY');
+  // --- EARLY DIAGNOSTIC LOG END ---
+
+  // Temporarily return here to see if the function can even get this far
+  // If this works, the problem is deeper in the function.
+  // If this still gives 500, the problem is with the function's very initialization.
+  // return NextResponse.json({ message: "Early check successful, API not called yet." }, { status: 200 });
+
+
   try {
     const formData = await request.formData();
     const file = formData.get('dataset') as File | null;
@@ -102,7 +111,6 @@ export async function POST(request: NextRequest) {
     `;
 
     // Call Gemini API
-    // THIS IS THE CRUCIAL CHANGE: Load API key from environment variables
     const apiKey = process.env.GEMINI_API_KEY; 
 
     if (!apiKey) {
@@ -139,7 +147,6 @@ export async function POST(request: NextRequest) {
         }
       }
     };
-
 
     let result;
     let delay = 1000; // Initial delay of 1 second
